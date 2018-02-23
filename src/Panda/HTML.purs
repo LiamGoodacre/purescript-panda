@@ -7,7 +7,7 @@ module Panda.HTML
 
 import Data.Maybe           (Maybe)
 import Panda.HTML.Elements
-import Panda.HTML.Watchers
+import Panda.HTML.Watchers  (watchAny)
 import Panda.Internal.Types as Types
 import Prelude              (($))
 import Util.Exists          (mkExists3)

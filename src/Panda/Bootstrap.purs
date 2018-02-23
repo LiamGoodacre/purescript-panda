@@ -7,13 +7,12 @@ import Control.Plus             (empty)
 import DOM.Node.Document        (createElement, createTextNode) as DOM
 import DOM.Node.Node            (appendChild, firstChild, removeChild) as DOM
 import DOM.Node.Types           (Document, Node, elementToNode, textToNode) as DOM
-import Data.Filterable          (filtered)
 import Data.Foldable            (foldr, sequence_)
 import Data.Lazy                (force)
 import Data.Maybe               (Maybe(..))
-import Data.Traversable         (sequence, traverse)
+import Data.Traversable         (traverse)
 import FRP.Event                (Event, create, subscribe) as FRP
-import FRP.Event.Class          (fold, withLast, sampleOn) as FRP
+import FRP.Event.Class          (withLast, sampleOn) as FRP
 import Panda.Bootstrap.Property as Property
 import Panda.Internal.Types     as Types
 import Prelude                  ((<>), (*>), Unit, bind, discard, id, map, pure, unit, when)

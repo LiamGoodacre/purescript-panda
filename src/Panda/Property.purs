@@ -35,10 +35,10 @@ eventToWheelEvent = unsafeCoerce
 
 -- Event producers
 
-type Producer input
-  = ∀ update state event
-  . (input → event)
-  → Types.Property update state event
+type Producer produces
+  = ∀ input event
+  . (produces → event)
+  → Types.Property input event
 
 makeProducer
   ∷ ∀ input
@@ -46,13 +46,9 @@ makeProducer
   → (DOM.Event → input)
   → Producer input
 makeProducer key conversion onEvent
-  = Types.PProducer
-      $ Types.PropertyProducer
-         { key
-          , onEvent: Just
-              <<< onEvent
-              <<< conversion
-          }
+  = Types.PEvent key
+  $ Types.IgnoreInput
+  $ Just <<< onEvent <<< conversion
 
 onAbort ∷ Producer DOM.Event
 onAbort = makeProducer Types.OnAbort id
@@ -165,16 +161,13 @@ onTransitionEnd = makeProducer Types.OnTransitionEnd id
 -- Static properties
 
 type StaticProperty
-  = ∀ update state event
-  . Types.Property update state event
+  = ∀ input event
+  . Types.Property input event
 
 make ∷ String → String → StaticProperty
 make key value'
-  = Types.PStatic
-      $ Types.PropertyStatic
-          { key
-          , value: value'
-          }
+  = Types.PString key
+  $ Types.IgnoreInput value'
 
 accept ∷ String → StaticProperty
 accept = make "accept"

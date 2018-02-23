@@ -5,5 +5,4 @@ package-lock.json
 .pulp-cache
 node_modules
 output
-
 bower_components

@@ -2,18 +2,18 @@ module Panda.Bootstrap.Property where
 
 import Control.Monad.Eff         (Eff)
 import Control.Plus              (empty)
-import Data.Maybe                (Maybe(..))
 import DOM.Event.EventTarget     (addEventListener, eventListener, removeEventListener, EventListener) as DOM
 import DOM.Event.Types           (Event, EventType) as DOM
 import DOM.HTML.Event.EventTypes as DOM.Events
 import DOM.Node.Element          (removeAttribute, setAttribute) as DOM
 import DOM.Node.Types            (Element, elementToEventTarget) as DOM
 import Data.Filterable           (filtered)
-import Data.Foldable             (sequence_)
+import Data.Foldable             (sequence_, for_)
 import Data.Lazy                 (force)
 import FRP.Event                 (Event, create, subscribe) as FRP
 import FRP.Event.Class           (withLast) as FRP
 import Panda.Internal.Types      as Types
+
 import Prelude
 
 -- | Given a Producer, return the string that identifies it when adding an
@@ -110,89 +110,108 @@ producerToEventType
 -- string that was used to register the event.
 attach
   ∷ ∀ event
-  . { key     ∷ Types.Producer
-    , onEvent ∷ DOM.Event → event
-    }
+  . Types.Producer
+  → (DOM.Event → event)
   → DOM.Element
   → Eff _
       { listener ∷ DOM.EventListener _
       , events ∷ FRP.Event event
       }
 
-attach { key, onEvent } element = do
+attach producer onEvent element = do
   { push, event: events } ← FRP.create
 
   let
     eventTarget = DOM.elementToEventTarget element
-    eventType   = producerToEventType key
+    eventType   = producerToEventType producer
     listener    = DOM.eventListener (push <<< onEvent)
 
   DOM.addEventListener eventType listener false eventTarget
 
   pure
-      { listener
-      , events
-      }
+    { listener
+    , events
+    }
 
 -- | Render a Property on a DOM element. This also initialises any
 -- `Watcher`-style listeners.
 render
-  ∷ ∀ update state event
+  ∷ ∀ input event
   . DOM.Element
-  → Types.Property update state event
+  → Types.Property input event
   → Eff _
       { cancel ∷ Types.Canceller _
       , events ∷ FRP.Event event
       , handleUpdate
-          ∷ { update ∷ update
-            , state  ∷ state
-            }
+          ∷ input
           → Eff _ Unit
       }
 
 render element
   = case _ of
-      Types.PStatic (Types.PropertyStatic { key, value }) → do
-        DOM.setAttribute key value element
+      Types.PString key watching -> do
+        case watching of
+          Types.IgnoreInput value -> do
+            DOM.setAttribute key value element
 
-        pure
-          { cancel: pure unit
-          , events: empty
-          , handleUpdate: \_ → pure unit
-          }
+            pure
+              { cancel: DOM.removeAttribute key element
+              , events: empty
+              , handleUpdate: \_ → pure unit
+              }
 
-      Types.PWatcher (Types.PropertyWatcher { key, listener }) → do
-        { event: output,     push: toOutput }          ← FRP.create
-        { event: cancellers, push: registerCanceller } ← FRP.create
+          Types.WatchInput watcher -> do
+            { event: output,     push: toOutput }          ← FRP.create
+            { event: cancellers, push: registerCanceller } ← FRP.create
 
-        cancelIteration ← FRP.subscribe (FRP.withLast cancellers) \{ last } →
-          sequence_ last
+            cancelIteration ← FRP.subscribe (FRP.withLast cancellers) \{ last } →
+              sequence_ last
 
-        pure
-          { cancel: registerCanceller (pure unit) *> cancelIteration
-          , events: output
-          , handleUpdate: \update → do
-              let { interest, renderer } = listener update
+            pure
+              { cancel: do
+                  registerCanceller (pure unit)
+                  cancelIteration
+              , events: output
+              , handleUpdate: watcher >>> \{interest, result} →
+                  when interest $ for_ result \renderer -> do
+                    DOM.setAttribute key (force renderer) element
 
-              when interest do
-                case force renderer of
-                  Just value →
-                    DOM.setAttribute key value element
+                    registerCanceller do
+                       DOM.removeAttribute key element
+              }
 
-                  Nothing →
-                    DOM.removeAttribute key element
-          }
+      Types.PEvent producer watching -> do
+        case watching of
+          Types.IgnoreInput value -> do
+            let
+              eventTarget = DOM.elementToEventTarget element
+              eventType   = producerToEventType producer
 
-      Types.PProducer (Types.PropertyProducer trigger) → do
-        { listener, events } ← attach trigger element
+            { listener, events } ← attach producer value element
 
-        let
-          eventTarget = DOM.elementToEventTarget element
-          eventType   = producerToEventType trigger.key
+            pure
+              { cancel: DOM.removeEventListener eventType listener false eventTarget
+              , events: filtered events
+              , handleUpdate: \_ → pure unit
+              }
 
-        pure
-          { cancel: DOM.removeEventListener
-              eventType listener false eventTarget
-          , events: filtered events
-          , handleUpdate: \_ → pure unit
-          }
+          Types.WatchInput watcher -> do
+            { event: output,     push: toOutput }          ← FRP.create
+            { event: cancellers, push: registerCanceller } ← FRP.create
+
+            cancelIteration ← FRP.subscribe (FRP.withLast cancellers) \{ last } →
+              sequence_ last
+
+            let
+              eventTarget = DOM.elementToEventTarget element
+              eventType   = producerToEventType producer
+
+            pure
+              { cancel: registerCanceller (pure unit) *> cancelIteration
+              , events: output
+              , handleUpdate: watcher >>> \{interest, result} →
+                  when interest $ for_ result \renderer -> do
+                      { listener, events } ← attach producer (force renderer) element
+                      registerCanceller do
+                        DOM.removeEventListener eventType listener false eventTarget
+              }

@@ -5,7 +5,7 @@ import Prelude              (($))
 
 type StaticElement
   = ∀ eff update state event
-  . Array (Types.Property update state event)
+  . Array (Types.Property { update ∷ update, state ∷ state } event)
   → Array (Types.Component eff update state event)
   → Types.Component eff update state event
 

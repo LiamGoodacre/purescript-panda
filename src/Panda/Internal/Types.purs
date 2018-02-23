@@ -1,11 +1,12 @@
 module Panda.Internal.Types where
 
-import Control.Monad.Eff         (Eff)
-import DOM.Event.Types           (Event) as DOM
-import Data.Lazy                 (Lazy)
-import Data.Maybe                (Maybe)
-import FRP.Event                 (Event) as FRP
-import Util.Exists               (Exists3)
+import Control.Monad.Eff    (Eff)
+import DOM.Event.Types      (Event) as DOM
+import Data.Lazy            (Lazy)
+import Data.Maybe           (Maybe)
+import FRP.Event            (Event) as FRP
+import Util.Exists          (Exists3)
+import Data.Tuple           (Tuple)
 
 import Prelude
 
@@ -51,45 +52,24 @@ data Producer
   | OnSubmit
   | OnTransitionEnd
 
--- | A static property is just key => value, and can't do anything clever.
-newtype PropertyStatic
-  = PropertyStatic
-      { key   ∷ String
-      , value ∷ String
-      }
+-- | `Watching` describes either some fixed `output` that doesn't depend on
+-- | an `input`, or some `input` dependent `output`.
+-- | If the `output` does depend on `input` then it must provide an `interest`
+-- | and possibly some resulting `output`.
+data Watching input output
+  = IgnoreInput output
+  | WatchInput (input -> { interest ∷ Boolean
+                         , result ∷ Maybe (Lazy output) })
 
--- | A watcher property can vary depending on the state and most recent update,
--- which allows properties to respond to events. `interest` is a flag that
--- allows a property to say whether it is going to do anything useful (and
--- whether it's worth calling the `renderer`), though this may be ignored (e.g.
--- during initial render).
-newtype PropertyWatcher update state event
-  = PropertyWatcher
-  { key ∷ String
-  , listener ∷
-      { update ∷ update
-      , state  ∷ state
-      }
-    → { interest ∷ Boolean
-      , renderer ∷ Lazy (Maybe String)
-      }
-  }
-
--- | A producer is a property that... well, produces events! These properties
--- are indexed by `Producer` values. @TODO: allow for different information
--- within different `Producer` constructors.
-newtype PropertyProducer event
-  = PropertyProducer
-      { key     ∷ Producer
-      , onEvent ∷ DOM.Event → Maybe event
-      }
-
--- | A property is just one of the above things: a static property, a property
--- that depends on some events, or a property that produces events.
-data Property update state event
-  = PStatic    PropertyStatic
-  | PWatcher  (PropertyWatcher  update state event)
-  | PProducer (PropertyProducer              event)
+-- | A `Property` corresponds with either:
+-- | * A DOM node attribute, e.g `type="button"`
+-- | * A DOM event listener, e.g `onClick` with some listener
+-- |
+-- | The values associated with each of these property formats
+-- | may watch for changes of input - see `Watching`.
+data Property input event
+  = PString String (Watching input String)
+  | PEvent Producer (Watching input (DOM.Event -> Maybe event))
 
 ---
 
@@ -101,7 +81,7 @@ data Property update state event
 newtype ComponentStatic eff update state event
   = ComponentStatic
       { children   ∷ Array (Component eff update state event)
-      , properties ∷ Array (Property      update state event)
+      , properties ∷ Array (Property { update ∷ update, state ∷ state} event)
       , tagName    ∷ String
       }
 
